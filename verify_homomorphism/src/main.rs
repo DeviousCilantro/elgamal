@@ -1,35 +1,47 @@
 use std::io;
 use std::io::Write;
-use rug::{Integer, rand};
+use rug::Integer;
 use num_primes::Generator;
+use ring::rand::{SystemRandom, SecureRandom};
 
 
 fn generate_keypair() -> ((Integer, Integer, Integer), Integer) {
+    let rand = SystemRandom::new();
     let p = Integer::from_str_radix(&Generator::safe_prime(512).to_string(), 10).unwrap();
     let q = (p.clone() - Integer::from(1)) / 2;
     let mut a;
     let g;
-    let mut rand = rand::RandState::new();
     loop {
-        a = p.clone().random_below(&mut rand);
+        a = random_integer(&rand, p.clone());
         let asq = a.clone() * a.clone();
         if (asq - Integer::from(1)) % p.clone() != 0 {
                g = Integer::secure_pow_mod(a, &Integer::from(2), &q);
             break;
         }
     }
-    let alpha = q.clone().random_below(&mut rand);
+    let alpha = random_integer(&rand, q.clone());
     let h = g.clone().secure_pow_mod(&alpha, &q);
     ((q, g, h), alpha)
 }
 
+fn random_integer(rng: &SystemRandom, range: Integer) -> Integer {
+    loop {
+        let mut bytes = vec![0; ((range.significant_bits() + 7) / 8) as usize];
+        rng.fill(&mut bytes).unwrap();
+        let num = Integer::from_digits(&bytes, rug::integer::Order::Lsf);
+        if num < range {
+            return num;
+        }
+    }
+}
+
 fn encrypt_plaintext(plaintext: Integer, pk: (Integer, Integer, Integer)) -> (Integer, Integer) {
+    let rand = SystemRandom::new();
     let (q, g, h) = pk;
     let mut c1 = Integer::new();
     let mut c2 = Integer::new();
     if plaintext >= 0 && plaintext < q {
-        let mut rand = rand::RandState::new();
-        let r = q.clone().random_below(&mut rand);
+        let r = random_integer(&rand, q.clone());
         c1 = g.secure_pow_mod(&r, &q);
         c2 = ((plaintext % q.clone()) * h.secure_pow_mod(&r, &q)) % q.clone();
     }
@@ -43,12 +55,12 @@ fn decrypt_ciphertext(ciphertext: (Integer, Integer), sk: &Integer, q: &Integer)
 }
 
 fn exponential_elgamal(plaintext: &Integer, pk: (Integer, Integer, Integer)) -> (Integer, Integer) {
+    let rand = SystemRandom::new();
     let (q, g, h) = pk;
     let mut c1 = Integer::new();
     let mut c2 = Integer::new();
     if *plaintext >= 0 && *plaintext < q {
-        let mut rand = rand::RandState::new();
-        let r = q.clone().random_below(&mut rand);
+        let r = random_integer(&rand, q.clone());
         c1 = g.clone().secure_pow_mod(&r, &q);
         c2 = (g.secure_pow_mod(plaintext, &q) * h.secure_pow_mod(&r, &q)) % q.clone();
     }

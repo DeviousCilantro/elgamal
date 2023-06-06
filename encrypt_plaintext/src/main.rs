@@ -1,20 +1,32 @@
 use std::io;
 use std::io::Write;
-use rug::{Integer, rand};
-
+use rug::Integer;
+use ring::rand::{SystemRandom, SecureRandom};
 
 fn encrypt_plaintext(plaintext: Integer, pk: (Integer, Integer, Integer)) -> (Integer, Integer) {
+    let rand = SystemRandom::new();
     let (q, g, h) = pk;
     let mut c1 = Integer::new();
     let mut c2 = Integer::new();
     if plaintext >= 0 && plaintext < q {
-        let mut rand = rand::RandState::new();
-        let r = q.clone().random_below(&mut rand);
+        let r = random_integer(&rand, q.clone());
         c1 = g.secure_pow_mod(&r, &q);
         c2 = ((plaintext % q.clone()) * h.secure_pow_mod(&r, &q)) % q.clone();
     }
     (c1, c2)
 }
+
+fn random_integer(rng: &SystemRandom, range: Integer) -> Integer {
+    loop {
+        let mut bytes = vec![0; ((range.significant_bits() + 7) / 8) as usize];
+        rng.fill(&mut bytes).unwrap();
+        let num = Integer::from_digits(&bytes, rug::integer::Order::Lsf);
+        if num < range {
+            return num;
+        }
+    }
+}
+
 
 fn main() {
     print!("Enter the plaintext: ");
